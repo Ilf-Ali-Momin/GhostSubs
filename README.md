@@ -4,6 +4,7 @@
 
 Discover hidden recurring charges, identify unused subscriptions, and take control of your spending.
 
+![License](https://img.shields.io/badge/License-MIT-blue)
 ---
 
 ## ✨ Features
