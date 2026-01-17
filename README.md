@@ -30,7 +30,7 @@ Discover hidden recurring charges, identify unused subscriptions, and take contr
 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ghostsubs.git
+git clone https://github.com/Ilf-Ali-Momin/ghostsubs.git
 cd ghostsubs
 ```
 
