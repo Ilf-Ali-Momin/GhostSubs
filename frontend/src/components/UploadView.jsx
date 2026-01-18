@@ -35,15 +35,12 @@ function UploadView({ onComplete, onError }) {
       setLoadingMessage("Detecting subscription patterns...");
       setProgress(60);
 
-      const response = await axios.post(
-        "http://localhost:5001/api/analyze",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:5001";
+      const response = await axios.post(`${apiUrl}/api/analyze`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
       setLoadingMessage("Generating insights...");
       setProgress(80);
