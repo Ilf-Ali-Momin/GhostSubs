@@ -9,9 +9,19 @@ function LandingPage({ onFileSelected }) {
   const handleFileSelect = (file) => {
     if (!file) return;
 
-    const validTypes = ["text/csv", "application/vnd.ms-excel"];
-    if (!validTypes.includes(file.type) && !file.name.endsWith(".csv")) {
-      alert("Please upload a CSV file");
+    const validTypes = [
+      "text/csv",
+      "application/pdf",
+      "application/vnd.ms-excel",
+    ];
+    const validExtensions = [".csv", ".pdf"];
+    const isValidType = validTypes.includes(file.type);
+    const isValidExt = validExtensions.some((ext) =>
+      file.name.toLowerCase().endsWith(ext),
+    );
+
+    if (!isValidType && !isValidExt) {
+      alert("Please upload a CSV or PDF file");
       return;
     }
 
@@ -21,7 +31,7 @@ function LandingPage({ onFileSelected }) {
         name: file.name,
         size: file.size,
         type: file.type,
-      })
+      }),
     );
 
     const reader = new FileReader();
@@ -161,14 +171,14 @@ function LandingPage({ onFileSelected }) {
                   Drop your bank statement
                 </p>
                 <p className="text-gray-500">
-                  or click to browse • CSV format • Secure & Private
+                  or click to browse • CSV or PDF format • Secure & Private
                 </p>
               </div>
 
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv"
+                accept=".csv, .pdf"
                 onChange={(e) => handleFileSelect(e.target.files[0])}
                 className="hidden"
               />
