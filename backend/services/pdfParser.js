@@ -1,11 +1,13 @@
-import pdf from "pdf-parse";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 
 /**
  * Extract text from PDF buffer
  */
 export async function extractTextFromPDF(buffer) {
   try {
-    const data = await pdf(buffer);
+    const data = await pdfParse(buffer);
     return data.text;
   } catch (error) {
     throw new Error(`PDF parsing failed: ${error.message}`);
@@ -29,7 +31,7 @@ export function parseTransactionsFromPDF(text) {
 
   // Amount patterns (negative or with minus/debit indicators)
   const amountPatterns = [
-    /-?\$?[\d,]+\.\d{2}/, // -$1,234.56 or $1,234.56
+    /-?\$?€?[\d,]+\.\d{2}/, // -$1,234.56 or €1,234.56
     /[\d,]+\.\d{2}-/, // 1,234.56-
     /\([\d,]+\.\d{2}\)/, // (1,234.56)
   ];
@@ -57,7 +59,7 @@ export function parseTransactionsFromPDF(text) {
       amountMatch = line.match(pattern);
       if (amountMatch) {
         let amountStr = amountMatch[0]
-          .replace(/[$,]/g, "")
+          .replace(/[$€,]/g, "")
           .replace(/[()]/g, "")
           .replace(/-$/, "");
 
