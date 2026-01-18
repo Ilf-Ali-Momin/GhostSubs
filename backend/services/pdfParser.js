@@ -1,42 +1,76 @@
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 /**
- * Extract text from PDF buffer
+ * Extract text from PDF buffer using pdfjs-dist
  */
 export async function extractTextFromPDF(buffer) {
   try {
-    const data = await pdfParse(buffer);
-    return data.text;
+    const loadingTask = getDocument({
+      data: new Uint8Array(buffer),
+      useSystemFonts: true,
+    });
+
+    const pdf = await loadingTask.promise;
+    let fullText = "";
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+
+      const pageText = textContent.items.map((item) => item.str).join(" ");
+
+      fullText += pageText + "\n";
+    }
+
+    console.log(
+      `📄 Extracted ${fullText.length} characters from ${pdf.numPages} pages`,
+    );
+    return fullText;
   } catch (error) {
+    console.error("PDF extraction error:", error);
     throw new Error(`PDF parsing failed: ${error.message}`);
   }
 }
 
 /**
  * Parse transactions from PDF text
- * Attempts to detect common bank statement formats
+ * Optimized for bank statement format: Date Description $-Amount Balance
  */
 export function parseTransactionsFromPDF(text) {
   const transactions = [];
   const lines = text.split("\n").filter((line) => line.trim());
 
-  // Common date patterns
+  console.log(`📄 Processing ${lines.length} lines from PDF`);
+
+  // Date patterns - Updated for YYYY-MM-DD format
   const datePatterns = [
+    /(\d{4}-\d{2}-\d{2})/, // 2025-10-20 (YOUR FORMAT!)
     /(\d{1,2}\/\d{1,2}\/\d{4})/, // MM/DD/YYYY or DD/MM/YYYY
-    /(\d{4}-\d{2}-\d{2})/, // YYYY-MM-DD
     /(\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})/i, // DD MMM YYYY
   ];
 
-  // Amount patterns (negative or with minus/debit indicators)
+  // Amount patterns - Updated for $-19.99 format (YOUR FORMAT!)
   const amountPatterns = [
-    /-?\$?€?[\d,]+\.\d{2}/, // -$1,234.56 or €1,234.56
-    /[\d,]+\.\d{2}-/, // 1,234.56-
-    /\([\d,]+\.\d{2}\)/, // (1,234.56)
+    /\$-[\d,]+\.\d{2}/, // $-19.99 (EXACT MATCH!)
+    /-\$[\d,]+\.\d{2}/, // -$19.99
+    /\$[\d,]+\.\d{2}-/, // $19.99-
+    /€-[\d,]+\.\d{2}/, // €-19.99
+    /-€[\d,]+\.\d{2}/, // -€19.99
+    /£-[\d,]+\.\d{2}/, // £-19.99
+    /-£[\d,]+\.\d{2}/, // -£19.99
+    /\([\$€£]?[\d,]+\.\d{2}\)/, // ($19.99)
   ];
 
   for (const line of lines) {
+    // Skip header lines and very short lines
+    if (
+      line.includes("Date Description") ||
+      line.includes("Account Statement") ||
+      line.trim().length < 15
+    ) {
+      continue;
+    }
+
     // Try to find date
     let dateMatch = null;
     let date = null;
@@ -58,52 +92,55 @@ export function parseTransactionsFromPDF(text) {
     for (const pattern of amountPatterns) {
       amountMatch = line.match(pattern);
       if (amountMatch) {
-        let amountStr = amountMatch[0]
-          .replace(/[$€,]/g, "")
-          .replace(/[()]/g, "")
-          .replace(/-$/, "");
+        // Extract just the number, remove all symbols
+        let amountStr = amountMatch[0].replace(/[$€£,\s()-]/g, "");
 
         amount = parseFloat(amountStr);
 
-        // If amount is in parentheses or ends with -, make it negative
-        if (/\(.*\)/.test(amountMatch[0]) || /-$/.test(amountMatch[0])) {
-          amount = -Math.abs(amount);
+        if (!isNaN(amount) && amount > 0) {
+          // Make it negative (it's an expense)
+          amount = -amount;
+          break;
         }
-
-        // If pattern started with -, it's already negative
-        if (amountMatch[0].startsWith("-")) {
-          amount = -Math.abs(amount);
-        }
-
-        if (!isNaN(amount)) break;
       }
     }
 
     if (amount === null || isNaN(amount) || amount >= 0) continue;
 
-    // Extract description (everything between date and amount)
-    let description = line
-      .replace(dateMatch[0], "")
-      .replace(amountMatch[0], "")
+    // Extract description (text between date and amount)
+    let description = line;
+
+    if (dateMatch) {
+      description = description.replace(dateMatch[0], "");
+    }
+    if (amountMatch) {
+      description = description.replace(amountMatch[0], "");
+    }
+
+    // Also remove the balance amount (last number on line)
+    description = description
+      .replace(/\$[\d,]+\.\d{2}$/, "")
+      .replace(/€[\d,]+\.\d{2}$/, "")
+      .replace(/£[\d,]+\.\d{2}$/, "")
+      .replace(/\s+/g, " ")
       .trim();
 
-    // Clean up description
-    description = description
-      .replace(/\s+/g, " ")
-      .replace(/^[-\s]+|[-\s]+$/g, "")
-      .substring(0, 100); // Limit length
-
-    if (description.length > 3) {
+    if (description.length > 2) {
       transactions.push({
         date,
         amount: Math.abs(amount),
         description,
         merchant: normalizeMerchant(description),
       });
+
+      console.log(
+        `✅ Found: ${date.toISOString().split("T")[0]} | ${description} | $${Math.abs(amount)}`,
+      );
     }
   }
 
-  console.log(`📄 Extracted ${transactions.length} transactions from PDF`);
+  console.log(`✅ Extracted ${transactions.length} transactions from PDF`);
+
   return transactions;
 }
 
@@ -138,9 +175,17 @@ function normalizeMerchant(description) {
     /SLACK/i,
     /GITHUB/i,
     /ZOOM/i,
+    /CHATGPT/i,
+    /OPENAI/i,
+    /CANVA/i,
+    /YOUTUBE/i,
     /GYM|FITNESS|YOGA/i,
     /INSURANCE/i,
     /PHONE|MOBILE|TELECOM/i,
+    /STARBUCKS/i,
+    /SHELL/i,
+    /LANDLORD|RENT/i,
+    /UTILITY|UTILITIES/i,
   ];
 
   for (const pattern of brandPatterns) {
